@@ -428,21 +428,23 @@ function renderLicense(sideData) {
   const out=document.createElement('canvas'); out.width=OUT_W; out.height=OUT_H;
   const octx=out.getContext('2d');
   octx.fillStyle='#fff'; octx.fillRect(0,0,OUT_W,OUT_H);
-  const rad=Math.round(OUT_W*.04);
-  octx.save(); octx.beginPath();
-  octx.moveTo(rad,0); octx.lineTo(OUT_W-rad,0); octx.quadraticCurveTo(OUT_W,0,OUT_W,rad);
-  octx.lineTo(OUT_W,OUT_H-rad); octx.quadraticCurveTo(OUT_W,OUT_H,OUT_W-rad,OUT_H);
-  octx.lineTo(rad,OUT_H); octx.quadraticCurveTo(0,OUT_H,0,OUT_H-rad);
-  octx.lineTo(0,rad); octx.quadraticCurveTo(0,0,rad,0);
-  octx.closePath(); octx.clip();
   octx.drawImage(warped,0,0,OUT_W,OUT_H);
-  octx.restore();
   const gid=octx.getImageData(0,0,OUT_W,OUT_H); const gd=gid.data;
   for (let i=0;i<gd.length;i+=4) {
     if(gd[i+3]<30){gd[i]=gd[i+1]=gd[i+2]=255;gd[i+3]=255;}
     else{const g=Math.round(.299*gd[i]+.587*gd[i+1]+.114*gd[i+2]);gd[i]=gd[i+1]=gd[i+2]=g;gd[i+3]=255;}
   }
   octx.putImageData(gid,0,0);
+  // Clean outline border
+  octx.strokeStyle='#aaaaaa';
+  octx.lineWidth=2;
+  const rad=Math.round(OUT_W*.04);
+  octx.beginPath();
+  octx.moveTo(rad,0); octx.lineTo(OUT_W-rad,0); octx.quadraticCurveTo(OUT_W,0,OUT_W,rad);
+  octx.lineTo(OUT_W,OUT_H-rad); octx.quadraticCurveTo(OUT_W,OUT_H,OUT_W-rad,OUT_H);
+  octx.lineTo(rad,OUT_H); octx.quadraticCurveTo(0,OUT_H,0,OUT_H-rad);
+  octx.lineTo(0,rad); octx.quadraticCurveTo(0,0,rad,0);
+  octx.closePath(); octx.stroke();
   return out;
 }
 
