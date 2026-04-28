@@ -6,28 +6,24 @@ exports.handler = async (event) => {
     const { imageBase64, mediaType } = JSON.parse(event.body);
     const imgBuffer = Buffer.from(imageBase64, 'base64');
 
+    // Step 1: Remove background via remove.bg
     const formData = new FormData();
-    formData.append('file', new Blob([imgBuffer], { type: mediaType }), 'license.jpg');
+    formData.append('image_file', new Blob([imgBuffer], { type: mediaType }), 'license.jpg');
+    formData.append('size', 'auto');
+    formData.append('format', 'png');
+    formData.append('scale', 'original');
+    formData.append('type', 'product');
 
-    const res = await fetch('https://begone-gateway.webeazzy.com/api/process-image', {
+    const rbgRes = await fetch('https://api.remove.bg/v1.0/removebg', {
       method: 'POST',
-      headers: { 'X-API-Key': process.env.WEBEAZZY_API_KEY },
+      headers: { 'X-Api-Key': process.env.REMOVEBG_API_KEY },
       body: formData
     });
+    if (!rbgRes.ok) throw new Error('remove.bg failed: ' + rbgRes.status);
+    const rbgBuffer = await rbgRes.arrayBuffer();
+    const cleanedBase64 = Buffer.from(rbgBuffer).toString('base64');
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.log('Webeazzy error:', res.status, errText.substring(0, 200));
-      throw new Error('Webeazzy failed: ' + res.status + ' ' + errText.substring(0, 100));
-    }
-
-    console.log('Webeazzy OK, content-type:', res.headers.get('content-type'));
-
-    // Webeazzy returns raw binary PNG
-    const buffer = await res.arrayBuffer();
-    const cleanedBase64 = Buffer.from(buffer).toString('base64');
-
-    // Claude validates the cleaned image
+    // Step 2: Claude validates the cleaned image
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -49,13 +45,13 @@ exports.handler = async (event) => {
               type: 'text',
               text: `You are validating a driver's license photo for printing. The background has been removed.
 
-Only reject if there is a SERIOUS problem:
+Only reject if there is ANY of these problems:
 1. Image is too blurry to read ANY text
-2. More than one full edge of the license is cut off
-3. Severe glare blocking more than half the card
-4. License is tilted more than 20 degrees
+2. Any edge of the license is cut off
+3. Any glare blocking text areas
+4. License is tilted more than 5 degrees — even a slight visible tilt should be rejected
 
-Minor tilt, slight blur, small shadows — these are FINE. Only reject truly unusable photos.
+Be strict. If the license looks anything less than perfectly flat and straight, reject it.
 
 Reply ONLY with raw JSON, no explanation, no markdown:
 {"pass": true}
@@ -91,7 +87,6 @@ Examples of reasons: "image is too blurry to read", "two edges are cut off", "se
     };
 
   } catch (err) {
-    console.log('Function error:', err.message);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: err.message })
