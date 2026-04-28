@@ -478,10 +478,6 @@ function renderLicense(sideData) {
     base=r;
   }
 
-  // Deskew + light perspective fix
-  base = deskewCard(base);
-  base = lightPerspectiveFix(base);
-
   // Fit into CR80 without cropping
   const ratio=base.width/base.height;
   let dw,dh,dx,dy;
