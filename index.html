@@ -92,12 +92,13 @@ footer a { color: #888; margin: 0 8px; text-decoration: none; }
   <div class="cam-label" id="cam-label">Front of License</div>
   <div id="camera-overlay">
     <div class="overlay-dim"></div>
-    <div class="overlay-cutout" id="overlay-cutout">
-      <div class="overlay-corner tl"></div>
-      <div class="overlay-corner tr"></div>
-      <div class="overlay-corner bl"></div>
-      <div class="overlay-corner br"></div>
-      <div class="overlay-hint">Hold phone flat & straight above card</div>
+    <div class="overlay-cutout state-searching" id="overlay-cutout">
+      <div class="overlay-corner tl" id="corner-tl"></div>
+      <div class="overlay-corner tr" id="corner-tr"></div>
+      <div class="overlay-corner bl" id="corner-bl"></div>
+      <div class="overlay-corner br" id="corner-br"></div>
+      <div class="overlay-hint" id="overlay-hint">Move card to fill the frame</div>
+      <div class="lock-progress" id="lock-progress"></div>
     </div>
   </div>
   <div class="auto-status">
@@ -105,7 +106,7 @@ footer a { color: #888; margin: 0 8px; text-decoration: none; }
   </div>
   <div class="camera-controls">
     <button class="cam-cancel" onclick="closeCamera()">Cancel</button>
-    <button class="cam-capture" onclick="startCountdown()">
+    <button class="cam-capture" id="cam-capture-btn" onclick="capturePhoto()" style="opacity:0.4;pointer-events:none;">
       <div class="cam-capture-inner" id="countdown-inner" style="display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:900;color:#000;"></div>
     </button>
     <div style="width:60px"></div>
@@ -330,9 +331,9 @@ function showRetakeAlert(reason, side) {
   el.innerHTML = `
     <div style="background:#fff;border-radius:20px;padding:32px 28px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
       <div style="font-size:2.5rem;margin-bottom:12px">📷</div>
-      <div style="font-size:1.1rem;font-weight:900;margin-bottom:8px;color:#000">Photo Rejected</div>
+      <div style="font-size:1.1rem;font-weight:900;margin-bottom:8px;color:#000">Retake Needed</div>
       <div style="font-size:0.88rem;color:#555;margin-bottom:24px;line-height:1.6">${reason}</div>
-      <div style="font-size:0.78rem;color:#888;margin-bottom:20px">Place the license on a dark flat surface. Hold your phone directly above it — flat and steady.</div>
+      <div style="font-size:0.78rem;color:#888;margin-bottom:20px">Place the license flat on a dark surface. Hold your phone directly above — parallel to the card.</div>
       <button onclick="document.getElementById('retake-alert').remove();openCamera('${side}')" style="display:block;width:100%;padding:14px;background:#000;color:#fff;border:none;border-radius:28px;font-size:1rem;font-weight:800;cursor:pointer">Retake Photo</button>
     </div>`;
   document.body.appendChild(el);
