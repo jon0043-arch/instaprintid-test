@@ -346,6 +346,7 @@ function showRetakeAlert(reason, side) {
   `;
   document.body.appendChild(alert);
 }
+function setStatus(msg) { document.getElementById('status').textContent=msg; }
 function setZoneStatus(s,msg,cls) {
   const el=document.getElementById('st-'+s);
   el.textContent=msg; el.className='zone-status'+(cls?' '+cls:'');
