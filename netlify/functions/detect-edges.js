@@ -6,24 +6,28 @@ exports.handler = async (event) => {
     const { imageBase64, mediaType } = JSON.parse(event.body);
     const imgBuffer = Buffer.from(imageBase64, 'base64');
 
-    // Step 1: Remove background via remove.bg
     const formData = new FormData();
-    formData.append('image_file', new Blob([imgBuffer], { type: mediaType }), 'license.jpg');
-    formData.append('size', 'auto');
-    formData.append('format', 'png');
-    formData.append('scale', 'original');
-    formData.append('type', 'product');
+    formData.append('file', new Blob([imgBuffer], { type: mediaType }), 'license.jpg');
 
-    const rbgRes = await fetch('https://api.remove.bg/v1.0/removebg', {
+    const res = await fetch('https://begone-gateway.webeazzy.com/api/process-image', {
       method: 'POST',
-      headers: { 'X-Api-Key': process.env.REMOVEBG_API_KEY },
+      headers: { 'X-API-Key': process.env.WEBEAZZY_API_KEY },
       body: formData
     });
-    if (!rbgRes.ok) throw new Error('remove.bg failed: ' + rbgRes.status);
-    const rbgBuffer = await rbgRes.arrayBuffer();
-    const cleanedBase64 = Buffer.from(rbgBuffer).toString('base64');
 
-    // Step 2: Claude validates the cleaned image
+    if (!res.ok) {
+      const errText = await res.text();
+      console.log('Webeazzy error:', res.status, errText.substring(0, 200));
+      throw new Error('Webeazzy failed: ' + res.status + ' ' + errText.substring(0, 100));
+    }
+
+    console.log('Webeazzy OK, content-type:', res.headers.get('content-type'));
+
+    // Webeazzy returns raw binary PNG
+    const buffer = await res.arrayBuffer();
+    const cleanedBase64 = Buffer.from(buffer).toString('base64');
+
+    // Claude validates the cleaned image
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -87,6 +91,7 @@ Examples of reasons: "image is too blurry to read", "two edges are cut off", "se
     };
 
   } catch (err) {
+    console.log('Function error:', err.message);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: err.message })
