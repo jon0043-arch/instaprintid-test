@@ -32,7 +32,6 @@ nav { display: flex; align-items: center; justify-content: space-between; paddin
 .zone-placeholder .icon { font-size: 1.6rem; display: block; margin-bottom: 4px; }
 .btn-row { display: flex; gap: 8px; }
 .cam-btn { flex: 1; padding: 9px 0; border-radius: 22px; font-size: 0.76rem; font-weight: 700; cursor: pointer; background: #000; color: #fff; border: none; width: 100%; }
-input[type=file] { display: none; }
 .status { text-align: center; font-size: 0.8rem; color: #0070ba; min-height: 20px; margin: 12px 0; }
 .go-btn { display: block; width: 100%; padding: 15px; background: #000; color: #fff; border: none; border-radius: 28px; font-size: 1rem; font-weight: 800; cursor: pointer; transition: opacity 0.2s; }
 .go-btn:disabled { opacity: 0.3; cursor: not-allowed; }
@@ -83,11 +82,7 @@ footer a { color: #888; margin: 0 8px; text-decoration: none; }
 .cam-capture:active { transform: scale(0.95); }
 .cam-capture-inner { width: 58px; height: 58px; border-radius: 50%; background: #fff; border: 2px solid #ddd; }
 .auto-status { position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.55); padding: 8px 18px; border-radius: 20px; }
-.auto-dot { width: 10px; height: 10px; border-radius: 50%; background: #888; transition: background 0.3s; flex-shrink: 0; }
-.auto-dot.ready { background: #00e676; box-shadow: 0 0 8px rgba(0,230,118,0.8); animation: blink 0.6s ease-in-out infinite; }
-@keyframes blink { 0%,100%{opacity:1;}50%{opacity:0.4;} }
 .auto-text { color: #fff; font-size: 0.78rem; font-weight: 700; white-space: nowrap; }
-.overlay-cutout.detected { border-color: #00e676; box-shadow: 0 0 0 9999px rgba(0,0,0,0.6), 0 0 0 2px #00e676; }
 </style>
 </head>
 <body>
@@ -102,7 +97,7 @@ footer a { color: #888; margin: 0 8px; text-decoration: none; }
       <div class="overlay-corner tr"></div>
       <div class="overlay-corner bl"></div>
       <div class="overlay-corner br"></div>
-      <div class="overlay-hint">Keep card perfectly flat & straight</div>
+      <div class="overlay-hint">Hold phone flat & straight above card</div>
     </div>
   </div>
   <div class="auto-status">
@@ -174,8 +169,8 @@ footer a { color: #888; margin: 0 8px; text-decoration: none; }
 <section class="how">
   <h2>Done in under 30 seconds.</h2>
   <div class="steps">
-    <div class="step"><div class="step-num">1</div><h3>Point & Hold</h3><p>Aim at the license inside the frame. It captures automatically.</p></div>
-    <div class="step"><div class="step-num">2</div><h3>AI Does Everything</h3><p>Background removed, straightened, converted to clean B&W.</p></div>
+    <div class="step"><div class="step-num">1</div><h3>Point & Hold</h3><p>Align the license in the frame and tap the button.</p></div>
+    <div class="step"><div class="step-num">2</div><h3>AI Does Everything</h3><p>Background removed, converted to clean B&W.</p></div>
     <div class="step"><div class="step-num">3</div><h3>Print or Download</h3><p>Perfect photocopy on standard 8.5"x11" paper. Every time.</p></div>
   </div>
 </section>
@@ -200,8 +195,8 @@ const OUT_W = 1013, OUT_H = 638;
 const PAGE_W = 2550, PAGE_H = 3300;
 const CR80_RATIO = OUT_W / OUT_H;
 const state = { f: null, b: null };
-let currentSide = null, videoStream = null, autoCapLoop = null, steadyFrames = 0;
-const NEEDED_FRAMES = 90;
+let currentSide = null, videoStream = null;
+let countdownTimer = null;
 
 if (!sessionStorage.getItem('cookieDismissed')) {
   document.getElementById('cookie-banner').style.display = 'flex';
@@ -210,8 +205,6 @@ function dismissCookie() {
   sessionStorage.setItem('cookieDismissed','1');
   document.getElementById('cookie-banner').style.display='none';
 }
-
-let countdownTimer = null;
 
 function startCountdown() {
   if (countdownTimer) return;
@@ -241,7 +234,6 @@ function cancelCountdown() {
   if (txt) txt.textContent = 'Line up card, then tap the button';
 }
 
-// ── Camera ───────────────────────────────────────────────────────────────────
 async function openCamera(side) {
   currentSide = side;
   document.getElementById('cam-label').textContent = side==='f' ? 'Front of License' : 'Back of License';
@@ -256,14 +248,9 @@ async function openCamera(side) {
 
 function closeCamera() {
   cancelCountdown();
-  stopAutoCapture();
   if (videoStream) { videoStream.getTracks().forEach(t=>t.stop()); videoStream=null; }
   document.getElementById('camera-modal').classList.remove('active');
   document.getElementById('camera-video').srcObject = null;
-}
-
-function stopAutoCapture() {
-  if (autoCapLoop) { clearInterval(autoCapLoop); autoCapLoop=null; }
 }
 
 function capturePhoto() {
@@ -271,63 +258,9 @@ function capturePhoto() {
   const canvas = document.getElementById('capture-canvas');
   canvas.width=video.videoWidth; canvas.height=video.videoHeight;
   canvas.getContext('2d').drawImage(video,0,0);
-
-  let skew = {straight:true,angle:0};
-  try { skew = checkSkew(canvas); } catch(e) {}
-  if (!skew.straight) {
-    document.getElementById('auto-text').textContent = `⚠️ Card tilted (${skew.angle.toFixed(0)}°) — straighten and try again`;
-    document.getElementById('countdown-inner').textContent = '';
-    return;
-  }
-
   canvas.toBlob(blob=>{ closeCamera(); handleFile(currentSide,blob); },'image/jpeg',1.0);
 }
 
-function checkSkew(canvas) {
-  const cw=canvas.width, ch=canvas.height;
-  // Crop the center overlay region (approx CR80 frame area)
-  const rw=Math.round(cw*.6), rh=Math.round(rw/CR80_RATIO);
-  const rx=Math.round((cw-rw)/2), ry=Math.round((ch-rh)/2);
-
-  // Downsample to 60 wide for fast edge detection
-  const SW=60, SH=Math.round(SW/CR80_RATIO);
-  const sm=document.createElement('canvas'); sm.width=SW; sm.height=SH;
-  sm.getContext('2d').drawImage(canvas,rx,ry,rw,rh,0,0,SW,SH);
-  const d=sm.getContext('2d').getImageData(0,0,SW,SH).data;
-
-  // Grayscale
-  const gray=new Float32Array(SW*SH);
-  for (let y=0;y<SH;y++) for (let x=0;x<SW;x++) {
-    const i=(y*SW+x)*4;
-    gray[y*SW+x]=.299*d[i]+.587*d[i+1]+.114*d[i+2];
-  }
-
-  // For each column find row of max vertical gradient in top half
-  const pts=[];
-  const searchH=Math.floor(SH*.55);
-  for (let x=1;x<SW-1;x++) {
-    let maxG=0,bestY=-1;
-    for (let y=1;y<searchH;y++) {
-      const g=Math.abs(gray[y*SW+x]-gray[(y-1)*SW+x]);
-      if(g>maxG){maxG=g;bestY=y;}
-    }
-    if(maxG>8 && bestY>=0) pts.push({x,y:bestY});
-  }
-
-  // Not enough edge data — allow capture
-  if (pts.length<8) return {straight:true,angle:0};
-
-  // Linear regression to find slope of top edge
-  const n=pts.length;
-  let sx=0,sy=0,sxy=0,sx2=0;
-  for (const p of pts){sx+=p.x;sy+=p.y;sxy+=p.x*p.y;sx2+=p.x*p.x;}
-  const slope=(n*sxy-sx*sy)/(n*sx2-sx*sx);
-  const angle=Math.abs(Math.atan(slope)*180/Math.PI);
-
-  return {straight: angle<8, angle};
-}
-
-// ── File handling ────────────────────────────────────────────────────────────
 function handleFile(side, file) {
   const url = URL.createObjectURL(file);
   const im = new Image();
@@ -351,23 +284,22 @@ async function processLicense(side, file) {
       body: JSON.stringify({ imageBase64:base64, mediaType:file.type||'image/jpeg' })
     });
     const data = await res.json();
-    if (data.error) throw new Error(data.error);
 
+    // Claude says retake
+    if (data.retake) {
+      setZoneStatus(side,'','');
+      document.getElementById('zone-'+side).className='zone';
+      document.getElementById('prev-'+side).classList.remove('show');
+      document.getElementById('ph-'+side).style.display='';
+      state[side] = null;
+      setStatus(`⚠️ Retake: ${data.reason}`);
+      setTimeout(() => openCamera(side), 2000);
+      return;
+    }
+
+    if (data.error) throw new Error(data.error);
     const img = new Image();
     img.onload = () => {
-      // Check straightness on the cleaned image
-      const check = checkSkewFromImage(img);
-      if (!check.straight) {
-        // Reset zone and reopen camera with warning
-        setZoneStatus(side, '', '');
-        document.getElementById('zone-'+side).className = 'zone';
-        document.getElementById('prev-'+side).classList.remove('show');
-        document.getElementById('ph-'+side).style.display = '';
-        state[side] = null;
-        setStatus(`⚠️ Card appears tilted (${check.angle.toFixed(0)}°) — retake the photo flat & straight.`);
-        setTimeout(() => openCamera(side), 1800);
-        return;
-      }
       state[side] = { img };
       setZoneStatus(side,'✅ Ready','ok');
       document.getElementById('zone-'+side).className='zone ready';
@@ -387,37 +319,6 @@ async function processLicense(side, file) {
   }
 }
 
-function checkSkewFromImage(img) {
-  // Draw cleaned (bg removed) image to canvas
-  const c = document.createElement('canvas');
-  c.width = img.naturalWidth; c.height = img.naturalHeight;
-  c.getContext('2d').drawImage(img, 0, 0);
-  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
-  const W = c.width, H = c.height;
-
-  // For each column, find the topmost non-transparent pixel
-  const pts = [];
-  for (let x = 0; x < W; x += Math.max(1, Math.floor(W/80))) {
-    for (let y = 0; y < H; y++) {
-      if (d[(y * W + x) * 4 + 3] > 40) {
-        pts.push({x, y});
-        break;
-      }
-    }
-  }
-
-  if (pts.length < 8) return { straight: true, angle: 0 };
-
-  // Linear regression on top edge points
-  const n = pts.length;
-  let sx=0,sy=0,sxy=0,sx2=0;
-  for (const p of pts) { sx+=p.x; sy+=p.y; sxy+=p.x*p.y; sx2+=p.x*p.x; }
-  const slope = (n*sxy - sx*sy) / (n*sx2 - sx*sx);
-  const angle = Math.abs(Math.atan(slope) * 180 / Math.PI);
-
-  return { straight: angle < 5, angle };
-}
-
 function setStatus(msg) { document.getElementById('status').textContent=msg; }
 function setZoneStatus(s,msg,cls) {
   const el=document.getElementById('st-'+s);
@@ -431,7 +332,6 @@ function fileToBase64(file) {
   return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file); });
 }
 
-// ── Render license to CR80 canvas ────────────────────────────────────────────
 function renderLicense(sideData) {
   const {img} = sideData;
   const src=document.createElement('canvas');
@@ -439,8 +339,7 @@ function renderLicense(sideData) {
   src.getContext('2d').drawImage(img,0,0);
 
   // Bounding box crop
-  const ctx=src.getContext('2d');
-  const id=ctx.getImageData(0,0,src.width,src.height); const d=id.data;
+  const id=src.getContext('2d').getImageData(0,0,src.width,src.height); const d=id.data;
   let minX=src.width,minY=src.height,maxX=0,maxY=0;
   for (let y=0;y<src.height;y++) for (let x=0;x<src.width;x++) {
     if (d[(y*src.width+x)*4+3]>30) {
@@ -448,32 +347,30 @@ function renderLicense(sideData) {
     }
   }
   const pad=8,cx=Math.max(0,minX-pad),cy=Math.max(0,minY-pad);
-  const cw=Math.min(src.width,maxX+pad)-cx,ch=Math.min(src.height,maxY+pad)-cy;
+  const cw=Math.min(src.width,maxX+pad)-cx, ch=Math.min(src.height,maxY+pad)-cy;
   const cropped=document.createElement('canvas'); cropped.width=cw; cropped.height=ch;
   cropped.getContext('2d').drawImage(src,cx,cy,cw,ch,0,0,cw,ch);
 
-  // Rotate portrait
+  // Rotate if portrait
   let base=cropped;
   if (cropped.height>cropped.width) {
     const r=document.createElement('canvas'); r.width=ch; r.height=cw;
     const rc=r.getContext('2d'); rc.translate(ch/2,cw/2); rc.rotate(Math.PI/2); rc.drawImage(cropped,-cw/2,-ch/2);
     base=r;
   }
-  // Fit card into CR80 canvas — scale to fill, preserve aspect ratio
+
+  // Fit into CR80 without cropping
   const ratio=base.width/base.height;
   let dw,dh,dx,dy;
-  if (ratio>CR80_RATIO) { dw=OUT_W; dh=Math.round(OUT_W/ratio); dx=0; dy=Math.round((OUT_H-dh)/2); }
-  else { dh=OUT_H; dw=Math.round(OUT_H*ratio); dy=0; dx=Math.round((OUT_W-dw)/2); }
-  const warped=document.createElement('canvas'); warped.width=OUT_W; warped.height=OUT_H;
-  const wctx=warped.getContext('2d');
-  wctx.fillStyle='#fff'; wctx.fillRect(0,0,OUT_W,OUT_H);
-  wctx.drawImage(base,0,0,base.width,base.height,dx,dy,dw,dh);
+  if (ratio>CR80_RATIO){dw=OUT_W;dh=Math.round(OUT_W/ratio);dx=0;dy=Math.round((OUT_H-dh)/2);}
+  else{dh=OUT_H;dw=Math.round(OUT_H*ratio);dy=0;dx=Math.round((OUT_W-dw)/2);}
 
-  // Grayscale only — no border, no clip
   const out=document.createElement('canvas'); out.width=OUT_W; out.height=OUT_H;
   const octx=out.getContext('2d');
   octx.fillStyle='#fff'; octx.fillRect(0,0,OUT_W,OUT_H);
-  octx.drawImage(warped,0,0,OUT_W,OUT_H);
+  octx.drawImage(base,0,0,base.width,base.height,dx,dy,dw,dh);
+
+  // Grayscale
   const gid=octx.getImageData(0,0,OUT_W,OUT_H); const gd=gid.data;
   for (let i=0;i<gd.length;i+=4) {
     if(gd[i+3]<30){gd[i]=gd[i+1]=gd[i+2]=255;gd[i+3]=255;}
@@ -483,7 +380,6 @@ function renderLicense(sideData) {
   return out;
 }
 
-// ── Build + output ───────────────────────────────────────────────────────────
 function buildPage() {
   const page=document.createElement('canvas'); page.width=PAGE_W; page.height=PAGE_H;
   const ctx=page.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,PAGE_W,PAGE_H);
