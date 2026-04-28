@@ -352,8 +352,22 @@ async function processLicense(side, file) {
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
+
     const img = new Image();
     img.onload = () => {
+      // Check straightness on the cleaned image
+      const check = checkSkewFromImage(img);
+      if (!check.straight) {
+        // Reset zone and reopen camera with warning
+        setZoneStatus(side, '', '');
+        document.getElementById('zone-'+side).className = 'zone';
+        document.getElementById('prev-'+side).classList.remove('show');
+        document.getElementById('ph-'+side).style.display = '';
+        state[side] = null;
+        setStatus(`⚠️ Card appears tilted (${check.angle.toFixed(0)}°) — retake the photo flat & straight.`);
+        setTimeout(() => openCamera(side), 1800);
+        return;
+      }
       state[side] = { img };
       setZoneStatus(side,'✅ Ready','ok');
       document.getElementById('zone-'+side).className='zone ready';
@@ -371,6 +385,37 @@ async function processLicense(side, file) {
     };
     img.src=url;
   }
+}
+
+function checkSkewFromImage(img) {
+  // Draw cleaned (bg removed) image to canvas
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  c.getContext('2d').drawImage(img, 0, 0);
+  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  const W = c.width, H = c.height;
+
+  // For each column, find the topmost non-transparent pixel
+  const pts = [];
+  for (let x = 0; x < W; x += Math.max(1, Math.floor(W/80))) {
+    for (let y = 0; y < H; y++) {
+      if (d[(y * W + x) * 4 + 3] > 40) {
+        pts.push({x, y});
+        break;
+      }
+    }
+  }
+
+  if (pts.length < 8) return { straight: true, angle: 0 };
+
+  // Linear regression on top edge points
+  const n = pts.length;
+  let sx=0,sy=0,sxy=0,sx2=0;
+  for (const p of pts) { sx+=p.x; sy+=p.y; sxy+=p.x*p.y; sx2+=p.x*p.x; }
+  const slope = (n*sxy - sx*sy) / (n*sx2 - sx*sx);
+  const angle = Math.abs(Math.atan(slope) * 180 / Math.PI);
+
+  return { straight: angle < 5, angle };
 }
 
 function setStatus(msg) { document.getElementById('status').textContent=msg; }
