@@ -22,8 +22,26 @@ exports.handler = async (event) => {
       throw new Error('Webeazzy failed: ' + res.status + ' ' + errText);
     }
 
-    const buffer = await res.arrayBuffer();
-    const cleanedBase64 = Buffer.from(buffer).toString('base64');
+    const contentType = res.headers.get('content-type') || '';
+    let cleanedBase64;
+
+    if (contentType.includes('application/json')) {
+      // Webeazzy returned JSON — extract base64 or URL
+      const json = await res.json();
+      if (json.result_b64) {
+        cleanedBase64 = json.result_b64;
+      } else if (json.result_url) {
+        const imgRes = await fetch(json.result_url);
+        const imgBuf = await imgRes.arrayBuffer();
+        cleanedBase64 = Buffer.from(imgBuf).toString('base64');
+      } else {
+        throw new Error('Webeazzy JSON response missing image data: ' + JSON.stringify(json));
+      }
+    } else {
+      // Raw binary PNG
+      const buffer = await res.arrayBuffer();
+      cleanedBase64 = Buffer.from(buffer).toString('base64');
+    }
 
     return {
       statusCode: 200,
