@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InstaPrintID — Perfect License Prints</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; background: #fff; color: #000; }
+nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; background: #fff; border-bottom: 1px solid #e5e5e5; position: sticky; top: 0; z-index: 100; }
+.logo { font-size: 1.4rem; font-weight: 900; color: #000; letter-spacing: -0.5px; }
+.logo span { color: #0070ba; }
+.nav-tag { font-size: 0.72rem; font-weight: 700; color: #0070ba; background: rgba(0,112,186,0.1); padding: 4px 12px; border-radius: 20px; border: 1px solid rgba(0,112,186,0.2); }
+.hero { background: #9dd4f3; padding: 72px 24px 0; text-align: center; }
+.hero h1 { font-size: clamp(2.6rem, 6vw, 5rem); font-weight: 900; line-height: 1.05; letter-spacing: -2px; margin-bottom: 28px; }
+.hero-card { background: #fff; border-radius: 20px 20px 0 0; max-width: 500px; margin: 0 auto; padding: 36px 28px 40px; box-shadow: 0 -8px 40px rgba(0,0,0,0.1); }
+.hero-card h2 { font-size: 1.3rem; font-weight: 900; margin-bottom: 6px; }
+.hero-card > p { color: #666; font-size: 0.88rem; margin-bottom: 24px; line-height: 1.6; }
+.upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+@media(max-width: 480px) { .upload-grid { grid-template-columns: 1fr; } }
+.zone { border: 2px dashed #ddd; border-radius: 14px; padding: 16px 12px; text-align: center; transition: all 0.2s; }
+.zone.ready { border-color: #0070ba; border-style: solid; background: rgba(0,112,186,0.02); }
+.zone.processing { border-color: #f0a500; border-style: solid; }
+.zone-tag { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1.2px; color: #0070ba; display: block; margin-bottom: 8px; }
+.zone-preview { width: 100%; max-height: 90px; object-fit: contain; border-radius: 6px; display: none; margin-bottom: 8px; }
+.zone-preview.show { display: block; }
+.zone-status { font-size: 0.72rem; margin-bottom: 8px; min-height: 16px; color: #888; }
+.zone-status.ok { color: #00a650; font-weight: 700; }
+.zone-status.working { color: #f0a500; }
+.zone-placeholder { font-size: 0.8rem; color: #aaa; margin-bottom: 10px; }
+.zone-placeholder .icon { font-size: 1.6rem; display: block; margin-bottom: 4px; }
+.btn-row { display: flex; gap: 8px; }
+.cam-btn { flex: 1; padding: 9px 0; border-radius: 22px; font-size: 0.76rem; font-weight: 700; cursor: pointer; background: #000; color: #fff; border: none; width: 100%; }
+input[type=file] { display: none; }
+.status { text-align: center; font-size: 0.8rem; color: #0070ba; min-height: 20px; margin: 12px 0; }
+.go-btn { display: block; width: 100%; padding: 15px; background: #000; color: #fff; border: none; border-radius: 28px; font-size: 1rem; font-weight: 800; cursor: pointer; transition: opacity 0.2s; }
+.go-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.output { display: none; margin-top: 24px; border-top: 1px solid #eee; padding-top: 24px; }
+.out-note { text-align: center; font-size: 0.75rem; color: #888; margin-bottom: 14px; }
+.preview-wrap { background: #f0f0f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; text-align: center; }
+.preview-wrap canvas { max-width: 100%; border-radius: 4px; box-shadow: 0 2px 12px rgba(0,0,0,0.15); background: #fff; }
+.action-btns { display: flex; gap: 10px; flex-direction: column; }
+.print-btn { display: block; width: 100%; padding: 14px; background: #0070ba; color: #fff; border: none; border-radius: 28px; font-size: 1rem; font-weight: 800; cursor: pointer; }
+.features { max-width: 900px; margin: 0 auto; padding: 64px 24px; }
+.features h2 { font-size: clamp(1.8rem, 4vw, 3rem); font-weight: 900; letter-spacing: -1px; margin-bottom: 36px; }
+.feat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; }
+.feat { background: #f5f5f5; border-radius: 16px; padding: 24px; }
+.feat-icon { font-size: 1.8rem; margin-bottom: 12px; }
+.feat h3 { font-size: 1rem; font-weight: 800; margin-bottom: 5px; }
+.feat p { font-size: 0.82rem; color: #555; line-height: 1.6; }
+.how { background: #9dd4f3; padding: 64px 24px; text-align: center; }
+.how h2 { font-size: clamp(1.8rem, 4vw, 3rem); font-weight: 900; letter-spacing: -1px; margin-bottom: 40px; }
+.steps { display: flex; justify-content: center; gap: 28px; flex-wrap: wrap; max-width: 680px; margin: 0 auto; }
+.step { flex: 1; min-width: 140px; }
+.step-num { width: 44px; height: 44px; border-radius: 50%; background: #000; color: #fff; font-size: 1.1rem; font-weight: 900; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
+.step h3 { font-size: 0.95rem; font-weight: 800; margin-bottom: 5px; }
+.step p { font-size: 0.8rem; color: #333; line-height: 1.5; }
+footer { background: #000; color: #888; text-align: center; padding: 28px; font-size: 0.78rem; }
+footer strong { color: #fff; }
+footer a { color: #888; margin: 0 8px; text-decoration: none; }
+@media print {
+  body > *:not(#print-area) { display: none !important; }
+  #print-area { display: block !important; }
+}
+#print-area { display: none; }
+#camera-modal { display: none; position: fixed; inset: 0; background: #000; z-index: 999; flex-direction: column; align-items: center; justify-content: center; }
+#camera-modal.active { display: flex; }
+#camera-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+#camera-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.overlay-dim { position: absolute; inset: 0; background: rgba(0,0,0,0.6); }
+.overlay-cutout { position: relative; z-index: 2; width: 88vw; max-width: 420px; aspect-ratio: 3.375 / 2.125; border-radius: 4.5%; box-shadow: 0 0 0 9999px rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.8); }
+.overlay-corner { position: absolute; width: 24px; height: 24px; border-color: #0070ba; border-style: solid; border-width: 0; }
+.overlay-corner.tl { top: -2px; left: -2px; border-top-width: 4px; border-left-width: 4px; border-radius: 4px 0 0 0; }
+.overlay-corner.tr { top: -2px; right: -2px; border-top-width: 4px; border-right-width: 4px; border-radius: 0 4px 0 0; }
+.overlay-corner.bl { bottom: -2px; left: -2px; border-bottom-width: 4px; border-left-width: 4px; border-radius: 0 0 0 4px; }
+.overlay-corner.br { bottom: -2px; right: -2px; border-bottom-width: 4px; border-right-width: 4px; border-radius: 0 0 4px 0; }
+.overlay-hint { position: absolute; bottom: -40px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 0.82rem; font-weight: 600; white-space: nowrap; opacity: 0.9; z-index: 3; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+.cam-label { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 0.95rem; font-weight: 800; z-index: 10; background: rgba(0,0,0,0.5); padding: 8px 20px; border-radius: 20px; white-space: nowrap; }
+.camera-controls { position: absolute; bottom: 48px; left: 0; right: 0; display: flex; align-items: center; justify-content: center; gap: 48px; z-index: 10; }
+.cam-cancel { color: #fff; font-size: 0.95rem; font-weight: 700; background: none; border: none; cursor: pointer; padding: 12px; }
+.cam-capture { width: 76px; height: 76px; border-radius: 50%; background: #fff; border: 5px solid rgba(255,255,255,0.4); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s; }
+.cam-capture:active { transform: scale(0.95); }
+.cam-capture-inner { width: 58px; height: 58px; border-radius: 50%; background: #fff; border: 2px solid #ddd; }
+.auto-status { position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.55); padding: 8px 18px; border-radius: 20px; }
+.auto-dot { width: 10px; height: 10px; border-radius: 50%; background: #888; transition: background 0.3s; flex-shrink: 0; }
+.auto-dot.ready { background: #00e676; box-shadow: 0 0 8px rgba(0,230,118,0.8); animation: blink 0.6s ease-in-out infinite; }
+@keyframes blink { 0%,100%{opacity:1;}50%{opacity:0.4;} }
+.auto-text { color: #fff; font-size: 0.78rem; font-weight: 700; white-space: nowrap; }
+.overlay-cutout.detected { border-color: #00e676; box-shadow: 0 0 0 9999px rgba(0,0,0,0.6), 0 0 0 2px #00e676; }
+</style>
+</head>
+<body>
+
+<div id="camera-modal">
+  <video id="camera-video" autoplay playsinline muted></video>
+  <div class="cam-label" id="cam-label">Front of License</div>
+  <div id="camera-overlay">
+    <div class="overlay-dim"></div>
+    <div class="overlay-cutout" id="overlay-cutout">
+      <div class="overlay-corner tl"></div>
+      <div class="overlay-corner tr"></div>
+      <div class="overlay-corner bl"></div>
+      <div class="overlay-corner br"></div>
+      <div class="overlay-hint">Keep card perfectly flat & straight</div>
+    </div>
+  </div>
+  <div class="auto-status">
+    <div class="auto-text" id="auto-text">Line up card, then tap the button</div>
+  </div>
+  <div class="camera-controls">
+    <button class="cam-cancel" onclick="closeCamera()">Cancel</button>
+    <button class="cam-capture" onclick="startCountdown()">
+      <div class="cam-capture-inner" id="countdown-inner" style="display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:900;color:#000;"></div>
+    </button>
+    <div style="width:60px"></div>
+  </div>
+</div>
+<canvas id="capture-canvas" style="display:none"></canvas>
+
+<nav>
+  <div class="logo">InstaPrint<span>ID</span></div>
+  <div class="nav-tag">🪪 Dealer Tool</div>
+</nav>
+
+<div class="hero">
+  <h1>Snap, fix,<br>and print.</h1>
+  <div class="hero-card">
+    <h2>InstaPrintID</h2>
+    <p>Point your camera at any driver's license. AI automatically captures, removes the background, and produces a clean black & white photocopy — ready to print in seconds.</p>
+    <div class="upload-grid">
+      <div class="zone" id="zone-f">
+        <span class="zone-tag">Front</span>
+        <img class="zone-preview" id="prev-f" alt="">
+        <div class="zone-placeholder" id="ph-f"><span class="icon">🪪</span>Front of License</div>
+        <div class="zone-status" id="st-f"></div>
+        <div class="btn-row">
+          <button class="cam-btn" onclick="openCamera('f')">📷 Take Photo</button>
+        </div>
+      </div>
+      <div class="zone" id="zone-b">
+        <span class="zone-tag">Back</span>
+        <img class="zone-preview" id="prev-b" alt="">
+        <div class="zone-placeholder" id="ph-b"><span class="icon">🪪</span>Back of License</div>
+        <div class="zone-status" id="st-b"></div>
+        <div class="btn-row">
+          <button class="cam-btn" onclick="openCamera('b')">📷 Take Photo</button>
+        </div>
+      </div>
+    </div>
+    <div class="status" id="status">Tap a button to photograph the license.</div>
+    <button class="go-btn" id="go-btn" disabled onclick="generate()">Generate PDF</button>
+    <div class="output" id="output">
+      <div class="out-note">Preview — prints on 8.5"x11" at exact license size</div>
+      <div class="preview-wrap"><canvas id="preview-canvas"></canvas></div>
+      <div class="action-btns">
+        <button class="print-btn" onclick="printLicense()">🖨️ Print</button>
+        <button class="print-btn" style="margin-top:10px;background:#333" onclick="downloadPDF()">⬇️ Download PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="features">
+  <h2>Everything a dealership needs.</h2>
+  <div class="feat-grid">
+    <div class="feat"><div class="feat-icon">📷</div><h3>Auto-Capture</h3><p>Just point and hold. The camera detects the license and snaps automatically.</p></div>
+    <div class="feat"><div class="feat-icon">✂️</div><h3>Background Removed</h3><p>AI strips everything except the license — no table, no hand, no clutter.</p></div>
+    <div class="feat"><div class="feat-icon">🖨️</div><h3>Photocopy Look</h3><p>Clean black & white on white — looks exactly like a flatbed copy machine.</p></div>
+    <div class="feat"><div class="feat-icon">🔒</div><h3>Nothing Stored</h3><p>Photos are processed and discarded. Never saved anywhere. Ever.</p></div>
+  </div>
+</section>
+
+<section class="how">
+  <h2>Done in under 30 seconds.</h2>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><h3>Point & Hold</h3><p>Aim at the license inside the frame. It captures automatically.</p></div>
+    <div class="step"><div class="step-num">2</div><h3>AI Does Everything</h3><p>Background removed, straightened, converted to clean B&W.</p></div>
+    <div class="step"><div class="step-num">3</div><h3>Print or Download</h3><p>Perfect photocopy on standard 8.5"x11" paper. Every time.</p></div>
+  </div>
+</section>
+
+<footer>
+  <strong>InstaPrintID</strong> &nbsp;·&nbsp; Built for automotive dealerships &nbsp;·&nbsp; No data stored. Ever.
+  <br><br>
+  <a href="/privacy">Privacy Policy</a>
+  <a href="/terms">Terms of Use</a>
+  <a href="/disclaimer">Disclaimer</a>
+</footer>
+
+<div id="print-area"></div>
+
+<div id="cookie-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#111;color:#fff;padding:14px 24px;font-size:0.82rem;display:flex;align-items:center;justify-content:space-between;gap:16px;z-index:9999;">
+  <span>🍪 InstaPrintID uses no cookies and stores no data. Ever. <a href="/privacy" style="color:#9dd4f3;text-decoration:none;">Learn more</a></span>
+  <button onclick="dismissCookie()" style="background:#0070ba;color:#fff;border:none;padding:8px 18px;border-radius:20px;font-size:0.82rem;font-weight:700;cursor:pointer;white-space:nowrap;">Got it</button>
+</div>
+
+<script>
+const OUT_W = 1013, OUT_H = 638;
+const PAGE_W = 2550, PAGE_H = 3300;
+const CR80_RATIO = OUT_W / OUT_H;
+const state = { f: null, b: null };
+let currentSide = null, videoStream = null, autoCapLoop = null, steadyFrames = 0;
+const NEEDED_FRAMES = 90;
+
+if (!sessionStorage.getItem('cookieDismissed')) {
+  document.getElementById('cookie-banner').style.display = 'flex';
+}
+function dismissCookie() {
+  sessionStorage.setItem('cookieDismissed','1');
+  document.getElementById('cookie-banner').style.display='none';
+}
+
+let countdownTimer = null;
+
+function startCountdown() {
+  if (countdownTimer) return;
+  const txt = document.getElementById('auto-text');
+  const inner = document.getElementById('countdown-inner');
+  let count = 3;
+  inner.textContent = count;
+  txt.textContent = 'Hold perfectly still...';
+  countdownTimer = setInterval(() => {
+    count--;
+    if (count > 0) {
+      inner.textContent = count;
+      if (navigator.vibrate) navigator.vibrate(40);
+    } else {
+      clearInterval(countdownTimer); countdownTimer = null;
+      inner.textContent = '';
+      capturePhoto();
+    }
+  }, 1000);
+}
+
+function cancelCountdown() {
+  if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+  const inner = document.getElementById('countdown-inner');
+  if (inner) inner.textContent = '';
+  const txt = document.getElementById('auto-text');
+  if (txt) txt.textContent = 'Line up card, then tap the button';
+}
+
+// ── Camera ───────────────────────────────────────────────────────────────────
+async function openCamera(side) {
+  currentSide = side;
+  document.getElementById('cam-label').textContent = side==='f' ? 'Front of License' : 'Back of License';
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080} }, audio:false
+    });
+    document.getElementById('camera-video').srcObject = videoStream;
+    document.getElementById('camera-modal').classList.add('active');
+  } catch(e) { alert('Camera access denied.'); }
+}
+
+function closeCamera() {
+  cancelCountdown();
+  stopAutoCapture();
+  if (videoStream) { videoStream.getTracks().forEach(t=>t.stop()); videoStream=null; }
+  document.getElementById('camera-modal').classList.remove('active');
+  document.getElementById('camera-video').srcObject = null;
+}
+
+function stopAutoCapture() {
+  if (autoCapLoop) { clearInterval(autoCapLoop); autoCapLoop=null; }
+}
+
+function capturePhoto() {
+  const video = document.getElementById('camera-video');
+  const canvas = document.getElementById('capture-canvas');
+  canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+  canvas.getContext('2d').drawImage(video,0,0);
+
+  let skew = {straight:true,angle:0};
+  try { skew = checkSkew(canvas); } catch(e) {}
+  if (!skew.straight) {
+    document.getElementById('auto-text').textContent = `⚠️ Card tilted (${skew.angle.toFixed(0)}°) — straighten and try again`;
+    document.getElementById('countdown-inner').textContent = '';
+    return;
+  }
+
+  canvas.toBlob(blob=>{ closeCamera(); handleFile(currentSide,blob); },'image/jpeg',1.0);
+}
+
+function checkSkew(canvas) {
+  const cw=canvas.width, ch=canvas.height;
+  // Crop the center overlay region (approx CR80 frame area)
+  const rw=Math.round(cw*.6), rh=Math.round(rw/CR80_RATIO);
+  const rx=Math.round((cw-rw)/2), ry=Math.round((ch-rh)/2);
+
+  // Downsample to 60 wide for fast edge detection
+  const SW=60, SH=Math.round(SW/CR80_RATIO);
+  const sm=document.createElement('canvas'); sm.width=SW; sm.height=SH;
+  sm.getContext('2d').drawImage(canvas,rx,ry,rw,rh,0,0,SW,SH);
+  const d=sm.getContext('2d').getImageData(0,0,SW,SH).data;
+
+  // Grayscale
+  const gray=new Float32Array(SW*SH);
+  for (let y=0;y<SH;y++) for (let x=0;x<SW;x++) {
+    const i=(y*SW+x)*4;
+    gray[y*SW+x]=.299*d[i]+.587*d[i+1]+.114*d[i+2];
+  }
+
+  // For each column find row of max vertical gradient in top half
+  const pts=[];
+  const searchH=Math.floor(SH*.55);
+  for (let x=1;x<SW-1;x++) {
+    let maxG=0,bestY=-1;
+    for (let y=1;y<searchH;y++) {
+      const g=Math.abs(gray[y*SW+x]-gray[(y-1)*SW+x]);
+      if(g>maxG){maxG=g;bestY=y;}
+    }
+    if(maxG>8 && bestY>=0) pts.push({x,y:bestY});
+  }
+
+  // Not enough edge data — allow capture
+  if (pts.length<8) return {straight:true,angle:0};
+
+  // Linear regression to find slope of top edge
+  const n=pts.length;
+  let sx=0,sy=0,sxy=0,sx2=0;
+  for (const p of pts){sx+=p.x;sy+=p.y;sxy+=p.x*p.y;sx2+=p.x*p.x;}
+  const slope=(n*sxy-sx*sy)/(n*sx2-sx*sx);
+  const angle=Math.abs(Math.atan(slope)*180/Math.PI);
+
+  return {straight: angle<8, angle};
+}
+
+// ── File handling ────────────────────────────────────────────────────────────
+function handleFile(side, file) {
+  const url = URL.createObjectURL(file);
+  const im = new Image();
+  im.onload = () => {
+    document.getElementById('prev-'+side).src=url;
+    document.getElementById('prev-'+side).classList.add('show');
+    document.getElementById('ph-'+side).style.display='none';
+    document.getElementById('zone-'+side).className='zone processing';
+    setZoneStatus(side,'⏳ Removing background...','working');
+    setStatus('Processing license...');
+    processLicense(side, file);
+  };
+  im.src=url;
+}
+
+async function processLicense(side, file) {
+  try {
+    const base64 = await fileToBase64(file);
+    const res = await fetch('/.netlify/functions/detect-edges', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ imageBase64:base64, mediaType:file.type||'image/jpeg' })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    const img = new Image();
+    img.onload = () => {
+      state[side] = { img };
+      setZoneStatus(side,'✅ Ready','ok');
+      document.getElementById('zone-'+side).className='zone ready';
+      checkBothReady();
+    };
+    img.src = 'data:image/png;base64,'+data.cleanedImage;
+  } catch(e) {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      state[side] = { img };
+      setZoneStatus(side,'⚠️ Background kept','');
+      document.getElementById('zone-'+side).className='zone ready';
+      checkBothReady();
+    };
+    img.src=url;
+  }
+}
+
+function setStatus(msg) { document.getElementById('status').textContent=msg; }
+function setZoneStatus(s,msg,cls) {
+  const el=document.getElementById('st-'+s);
+  el.textContent=msg; el.className='zone-status'+(cls?' '+cls:'');
+}
+function checkBothReady() {
+  if (state.f && state.b) { document.getElementById('go-btn').disabled=false; setStatus('Both sides ready — tap Generate PDF.'); }
+  else setStatus(!state.f ? 'Add the front of the license.' : 'Add the back of the license.');
+}
+function fileToBase64(file) {
+  return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file); });
+}
+
+// ── Perspective correction ───────────────────────────────────────────────────
+function findCardCorners(canvas) {
+  // Downsample 4x for speed
+  const sc=4, sw=Math.floor(canvas.width/sc), sh=Math.floor(canvas.height/sc);
+  const small=document.createElement('canvas'); small.width=sw; small.height=sh;
+  small.getContext('2d').drawImage(canvas,0,0,sw,sh);
+  const d=small.getContext('2d').getImageData(0,0,sw,sh).data;
+  let tl=null,tr=null,bl=null,br=null;
+  let tlMin=Infinity,trMax=-Infinity,blMin=Infinity,brMax=-Infinity;
+  for (let y=0;y<sh;y++) {
+    for (let x=0;x<sw;x++) {
+      if (d[(y*sw+x)*4+3]>50) {
+        const sum=x+y, diff=x-y;
+        if (sum<tlMin){tlMin=sum;tl={x,y};}
+        if (sum>brMax){brMax=sum;br={x,y};}
+        if (diff>trMax){trMax=diff;tr={x,y};}
+        if (diff<blMin){blMin=diff;bl={x,y};}
+      }
+    }
+  }
+  if (!tl||!tr||!bl||!br) return null;
+  // Scale back up
+  return [tl,tr,br,bl].map(p=>({x:p.x*sc,y:p.y*sc}));
+}
+
+function solveLinear8(A,b) {
+  const n=8, M=A.map((r,i)=>[...r,b[i]]);
+  for (let c=0;c<n;c++) {
+    let mx=c;
+    for (let r=c+1;r<n;r++) if (Math.abs(M[r][c])>Math.abs(M[mx][c])) mx=r;
+    [M[c],M[mx]]=[M[mx],M[c]];
+    if (Math.abs(M[c][c])<1e-12) continue;
+    for (let r=0;r<n;r++) {
+      if (r===c) continue;
+      const f=M[r][c]/M[c][c];
+      for (let j=c;j<=n;j++) M[r][j]-=f*M[c][j];
+    }
+  }
+  return M.map((r,i)=>r[n]/r[i]);
+}
+
+function getHomography(src,dst) {
+  const A=[],b=[];
+  for (let i=0;i<4;i++) {
+    const {x:sx,y:sy}=src[i], {x:dx,y:dy}=dst[i];
+    A.push([sx,sy,1,0,0,0,-sx*dx,-sy*dx]); b.push(dx);
+    A.push([0,0,0,sx,sy,1,-sx*dy,-sy*dy]); b.push(dy);
+  }
+  const h=solveLinear8(A,b);
+  return [[h[0],h[1],h[2]],[h[3],h[4],h[5]],[h[6],h[7],1]];
+}
+
+function applyH(H,x,y) {
+  const w=H[2][0]*x+H[2][1]*y+H[2][2];
+  return [(H[0][0]*x+H[0][1]*y+H[0][2])/w,(H[1][0]*x+H[1][1]*y+H[1][2])/w];
+}
+
+function perspectiveWarp(src, corners, dstW, dstH) {
+  const dstPts=[{x:0,y:0},{x:dstW-1,y:0},{x:dstW-1,y:dstH-1},{x:0,y:dstH-1}];
+  // Inverse homography: dst -> src
+  const Hinv=getHomography(dstPts, corners);
+  const sCtx=src.getContext('2d');
+  const sData=sCtx.getImageData(0,0,src.width,src.height).data;
+  const dst=document.createElement('canvas'); dst.width=dstW; dst.height=dstH;
+  const dCtx=dst.getContext('2d');
+  const dData=dCtx.createImageData(dstW,dstH);
+  const sw=src.width, sh=src.height;
+  const getP=(x,y)=>{
+    if (x<0||x>=sw||y<0||y>=sh) return [255,255,255,0];
+    const i=(y*sw+x)*4; return [sData[i],sData[i+1],sData[i+2],sData[i+3]];
+  };
+  for (let dy=0;dy<dstH;dy++) {
+    for (let dx=0;dx<dstW;dx++) {
+      const [sx,sy]=applyH(Hinv,dx,dy);
+      const x0=Math.floor(sx),y0=Math.floor(sy),x1=x0+1,y1=y0+1;
+      const fx=sx-x0,fy=sy-y0;
+      const p00=getP(x0,y0),p10=getP(x1,y0),p01=getP(x0,y1),p11=getP(x1,y1);
+      const i=(dy*dstW+dx)*4;
+      for (let c=0;c<4;c++) {
+        dData.data[i+c]=Math.round(p00[c]*(1-fx)*(1-fy)+p10[c]*fx*(1-fy)+p01[c]*(1-fx)*fy+p11[c]*fx*fy);
+      }
+    }
+  }
+  dCtx.putImageData(dData,0,0);
+  return dst;
+}
+
+// ── Render license to CR80 canvas ────────────────────────────────────────────
+function renderLicense(sideData) {
+  const {img} = sideData;
+  const src=document.createElement('canvas');
+  src.width=img.naturalWidth; src.height=img.naturalHeight;
+  src.getContext('2d').drawImage(img,0,0);
+
+  let warped = null;
+  const corners = findCardCorners(src);
+
+  if (corners) {
+    const [tl,tr,br,bl]=corners;
+    const w1=Math.hypot(tr.x-tl.x,tr.y-tl.y), w2=Math.hypot(br.x-bl.x,br.y-bl.y);
+    const h1=Math.hypot(bl.x-tl.x,bl.y-tl.y), h2=Math.hypot(br.x-tr.x,br.y-tr.y);
+    const cardW=(w1+w2)/2, cardH=(h1+h2)/2;
+
+    if (cardW>50 && cardH>30) {
+      // Portrait? reorder corners so wider dimension maps to OUT_W
+      const isPortrait = cardH > cardW;
+      const srcCorners = isPortrait
+        ? [bl, tl, tr, br]   // rotate 90° CW
+        : [tl, tr, br, bl];
+      try { warped = perspectiveWarp(src, srcCorners, OUT_W, OUT_H); } catch(e) {}
+    }
+  }
+
+  // Fallback: bounding box crop
+  if (!warped) {
+    const ctx=src.getContext('2d');
+    const id=ctx.getImageData(0,0,src.width,src.height); const d=id.data;
+    let minX=src.width,minY=src.height,maxX=0,maxY=0;
+    for (let y=0;y<src.height;y++) for (let x=0;x<src.width;x++) {
+      if (d[(y*src.width+x)*4+3]>30) {
+        if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+      }
+    }
+    const pad=8,cx=Math.max(0,minX-pad),cy=Math.max(0,minY-pad);
+    const cw=Math.min(src.width,maxX+pad)-cx,ch=Math.min(src.height,maxY+pad)-cy;
+    const cropped=document.createElement('canvas'); cropped.width=cw; cropped.height=ch;
+    cropped.getContext('2d').drawImage(src,cx,cy,cw,ch,0,0,cw,ch);
+    // Rotate portrait
+    let base=cropped;
+    if (cropped.height>cropped.width) {
+      const r=document.createElement('canvas'); r.width=ch; r.height=cw;
+      const rc=r.getContext('2d'); rc.translate(ch/2,cw/2); rc.rotate(Math.PI/2); rc.drawImage(cropped,-cw/2,-ch/2);
+      base=r;
+    }
+    const ratio=base.width/base.height;
+    let bx=0,by=0,bw=base.width,bh=base.height;
+    if (ratio>CR80_RATIO){bw=Math.round(base.height*CR80_RATIO);bx=Math.round((base.width-bw)/2);}
+    else{bh=Math.round(base.width/CR80_RATIO);by=Math.round((base.height-bh)/2);}
+    warped=document.createElement('canvas'); warped.width=OUT_W; warped.height=OUT_H;
+    warped.getContext('2d').drawImage(base,bx,by,bw,bh,0,0,OUT_W,OUT_H);
+  }
+
+  // Rounded corners + grayscale
+  const out=document.createElement('canvas'); out.width=OUT_W; out.height=OUT_H;
+  const octx=out.getContext('2d');
+  octx.fillStyle='#fff'; octx.fillRect(0,0,OUT_W,OUT_H);
+  const rad=Math.round(OUT_W*.04);
+  octx.save(); octx.beginPath();
+  octx.moveTo(rad,0); octx.lineTo(OUT_W-rad,0); octx.quadraticCurveTo(OUT_W,0,OUT_W,rad);
+  octx.lineTo(OUT_W,OUT_H-rad); octx.quadraticCurveTo(OUT_W,OUT_H,OUT_W-rad,OUT_H);
+  octx.lineTo(rad,OUT_H); octx.quadraticCurveTo(0,OUT_H,0,OUT_H-rad);
+  octx.lineTo(0,rad); octx.quadraticCurveTo(0,0,rad,0);
+  octx.closePath(); octx.clip();
+  octx.drawImage(warped,0,0,OUT_W,OUT_H);
+  octx.restore();
+  const gid=octx.getImageData(0,0,OUT_W,OUT_H); const gd=gid.data;
+  for (let i=0;i<gd.length;i+=4) {
+    if(gd[i+3]<30){gd[i]=gd[i+1]=gd[i+2]=255;gd[i+3]=255;}
+    else{const g=Math.round(.299*gd[i]+.587*gd[i+1]+.114*gd[i+2]);gd[i]=gd[i+1]=gd[i+2]=g;gd[i+3]=255;}
+  }
+  octx.putImageData(gid,0,0);
+  return out;
+}
+
+// ── Build + output ───────────────────────────────────────────────────────────
+function buildPage() {
+  const page=document.createElement('canvas'); page.width=PAGE_W; page.height=PAGE_H;
+  const ctx=page.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,PAGE_W,PAGE_H);
+  const startX=Math.round(PAGE_W*.52), topY=150, bottomY=Math.round(PAGE_H*.65);
+  ctx.drawImage(renderLicense(state.f),startX,topY,OUT_W,OUT_H);
+  ctx.drawImage(renderLicense(state.b),startX,bottomY,OUT_W,OUT_H);
+  return page;
+}
+
+function generate() {
+  setStatus('Building PDF...');
+  document.getElementById('go-btn').disabled=true;
+  setTimeout(()=>{
+    try {
+      const page=buildPage();
+      const prev=document.getElementById('preview-canvas');
+      const sc=420/PAGE_W; prev.width=420; prev.height=Math.round(PAGE_H*sc);
+      prev.getContext('2d').drawImage(page,0,0,prev.width,prev.height);
+      document.getElementById('output').style.display='block';
+      document.getElementById('output').scrollIntoView({behavior:'smooth'});
+      setStatus('✅ Ready to print or download.');
+    } catch(e){ setStatus('Error: '+e.message); }
+    document.getElementById('go-btn').disabled=false;
+  },100);
+}
+
+function printLicense() {
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF({unit:'in',format:'letter',orientation:'portrait'});
+  pdf.addImage(buildPage().toDataURL('image/jpeg',1.0),'JPEG',0,0,8.5,11);
+  pdf.autoPrint(); window.open(pdf.output('bloburl'));
+}
+
+function downloadPDF() {
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF({unit:'in',format:'letter',orientation:'portrait'});
+  pdf.addImage(buildPage().toDataURL('image/jpeg',1.0),'JPEG',0,0,8.5,11);
+  const a=document.createElement('a'); a.href=URL.createObjectURL(pdf.output('blob')); a.download='license-copy.pdf'; a.click();
+}
+</script>
+</body>
+</html>
