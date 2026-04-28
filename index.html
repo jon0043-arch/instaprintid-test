@@ -196,47 +196,12 @@ const OUT_W = 1013, OUT_H = 638;
 const PAGE_W = 2550, PAGE_H = 3300;
 const CR80_RATIO = OUT_W / OUT_H;
 const state = { f: null, b: null };
-let currentSide = null, videoStream = null, countdownTimer = null;
+let currentSide = null, videoStream = null, alignLoop = null, lockFrames = 0;
+const LOCK_NEEDED = 20; // ~0.66 seconds at 30fps
 
-// ── Cookie ───────────────────────────────────────────────────────────────────
-if (!sessionStorage.getItem('cookieDismissed')) {
-  document.getElementById('cookie-banner').style.display = 'flex';
-}
-function dismissCookie() {
-  sessionStorage.setItem('cookieDismissed','1');
-  document.getElementById('cookie-banner').style.display='none';
-}
+function startCountdown() {} // kept for safety, unused
+function cancelCountdown() {}
 
-// ── Countdown ────────────────────────────────────────────────────────────────
-function startCountdown() {
-  if (countdownTimer) return;
-  const txt = document.getElementById('auto-text');
-  const inner = document.getElementById('countdown-inner');
-  let count = 3;
-  inner.textContent = count;
-  txt.textContent = 'Hold perfectly still...';
-  countdownTimer = setInterval(() => {
-    count--;
-    if (count > 0) {
-      inner.textContent = count;
-      if (navigator.vibrate) navigator.vibrate(40);
-    } else {
-      clearInterval(countdownTimer); countdownTimer = null;
-      inner.textContent = '';
-      capturePhoto();
-    }
-  }, 1000);
-}
-
-function cancelCountdown() {
-  if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-  const inner = document.getElementById('countdown-inner');
-  if (inner) inner.textContent = '';
-  const txt = document.getElementById('auto-text');
-  if (txt) txt.textContent = 'Line up card, then tap the button';
-}
-
-// ── Camera ───────────────────────────────────────────────────────────────────
 async function openCamera(side) {
   currentSide = side;
   document.getElementById('cam-label').textContent = side==='f' ? 'Front of License' : 'Back of License';
@@ -246,14 +211,103 @@ async function openCamera(side) {
     });
     document.getElementById('camera-video').srcObject = videoStream;
     document.getElementById('camera-modal').classList.add('active');
+    startAlignDetect();
   } catch(e) { alert('Camera access denied.'); }
 }
 
 function closeCamera() {
-  cancelCountdown();
+  stopAlignDetect();
   if (videoStream) { videoStream.getTracks().forEach(t=>t.stop()); videoStream=null; }
   document.getElementById('camera-modal').classList.remove('active');
   document.getElementById('camera-video').srcObject = null;
+  resetOverlay();
+}
+
+function resetOverlay() {
+  const cutout = document.getElementById('overlay-cutout');
+  cutout.className = 'overlay-cutout state-searching';
+  document.getElementById('lock-progress').style.width = '0%';
+  document.getElementById('auto-text').textContent = 'Move card to fill the frame';
+  document.getElementById('overlay-hint').textContent = 'Move card to fill the frame';
+  lockFrames = 0;
+}
+
+function startAlignDetect() {
+  lockFrames = 0;
+  const video = document.getElementById('camera-video');
+  const cutout = document.getElementById('overlay-cutout');
+  const txt = document.getElementById('auto-text');
+  const hint = document.getElementById('overlay-hint');
+  const progress = document.getElementById('lock-progress');
+
+  alignLoop = setInterval(() => {
+    if (!video.videoWidth || !video.videoHeight) return;
+
+    // Sample center region matching overlay
+    const s = document.createElement('canvas');
+    s.width = 80; s.height = 50;
+    const sx = s.getContext('2d');
+    // Sample the overlay area (center 60% of frame)
+    sx.drawImage(video, video.videoWidth*.2, video.videoHeight*.25, video.videoWidth*.6, video.videoHeight*.5, 0, 0, 80, 50);
+    const d = sx.getImageData(0,0,80,50).data;
+
+    let bright=0, variance=0, edgeScore=0;
+    const n = d.length/4;
+
+    // Brightness
+    for (let i=0;i<d.length;i+=4) bright += .299*d[i]+.587*d[i+1]+.114*d[i+2];
+    const avg = bright/n;
+
+    // Variance
+    for (let i=0;i<d.length;i+=4) { const l=.299*d[i]+.587*d[i+1]+.114*d[i+2]; variance+=(l-avg)**2; }
+    variance/=n;
+
+    // Edge score — look for strong horizontal edges (card top/bottom)
+    const gray = new Float32Array(80*50);
+    for (let y=0;y<50;y++) for (let x=0;x<80;x++) {
+      const i=(y*80+x)*4;
+      gray[y*80+x]=.299*d[i]+.587*d[i+1]+.114*d[i+2];
+    }
+    for (let y=1;y<49;y++) for (let x=0;x<80;x++) {
+      edgeScore += Math.abs(gray[y*80+x]-gray[(y-1)*80+x]);
+    }
+    edgeScore /= (80*48);
+
+    const hasCard = avg > 60 && avg < 220 && variance > 800 && edgeScore > 3;
+    const wellAligned = avg > 80 && avg < 200 && variance > 1500 && edgeScore > 5;
+
+    if (wellAligned) {
+      lockFrames++;
+      cutout.className = 'overlay-cutout state-locked';
+      txt.textContent = 'Hold still...';
+      hint.textContent = '✅ Perfect — hold still!';
+      const pct = Math.min(100, Math.round(lockFrames/LOCK_NEEDED*100));
+      progress.style.width = pct + '%';
+
+      if (lockFrames >= LOCK_NEEDED) {
+        stopAlignDetect();
+        if (navigator.vibrate) navigator.vibrate([80,40,80]);
+        capturePhoto();
+      }
+    } else if (hasCard) {
+      lockFrames = Math.max(0, lockFrames-2);
+      cutout.className = 'overlay-cutout state-close';
+      txt.textContent = 'Getting closer — hold flat';
+      hint.textContent = '🟡 Almost there';
+      progress.style.width = Math.round(lockFrames/LOCK_NEEDED*100) + '%';
+    } else {
+      lockFrames = 0;
+      cutout.className = 'overlay-cutout state-searching';
+      txt.textContent = 'Move card to fill the frame';
+      hint.textContent = 'Move card to fill the frame';
+      progress.style.width = '0%';
+    }
+  }, 33);
+}
+
+function stopAlignDetect() {
+  if (alignLoop) { clearInterval(alignLoop); alignLoop=null; }
+  lockFrames = 0;
 }
 
 function capturePhoto() {
