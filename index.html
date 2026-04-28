@@ -414,12 +414,15 @@ function renderLicense(sideData) {
     const rc=r.getContext('2d'); rc.translate(ch/2,cw/2); rc.rotate(Math.PI/2); rc.drawImage(cropped,-cw/2,-ch/2);
     base=r;
   }
+  // Fit card into CR80 canvas without cropping — letterbox with white
   const ratio=base.width/base.height;
-  let bx=0,by=0,bw=base.width,bh=base.height;
-  if (ratio>CR80_RATIO){bw=Math.round(base.height*CR80_RATIO);bx=Math.round((base.width-bw)/2);}
-  else{bh=Math.round(base.width/CR80_RATIO);by=Math.round((base.height-bh)/2);}
+  let dw,dh,dx,dy;
+  if (ratio>CR80_RATIO) { dw=OUT_W; dh=Math.round(OUT_W/ratio); dx=0; dy=Math.round((OUT_H-dh)/2); }
+  else { dh=OUT_H; dw=Math.round(OUT_H*ratio); dy=0; dx=Math.round((OUT_W-dw)/2); }
   const warped=document.createElement('canvas'); warped.width=OUT_W; warped.height=OUT_H;
-  warped.getContext('2d').drawImage(base,bx,by,bw,bh,0,0,OUT_W,OUT_H);
+  const wctx=warped.getContext('2d');
+  wctx.fillStyle='#fff'; wctx.fillRect(0,0,OUT_W,OUT_H);
+  wctx.drawImage(base,0,0,base.width,base.height,dx,dy,dw,dh);
 
   // Rounded corners + grayscale
   const out=document.createElement('canvas'); out.width=OUT_W; out.height=OUT_H;
