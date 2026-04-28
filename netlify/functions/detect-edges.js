@@ -17,8 +17,12 @@ exports.handler = async (event) => {
       body: formData
     });
 
+    console.log('Webeazzy status:', res.status);
+    console.log('Webeazzy content-type:', res.headers.get('content-type'));
+
     if (!res.ok) {
       const errText = await res.text();
+      console.log('Webeazzy error body:', errText);
       throw new Error('Webeazzy failed: ' + res.status + ' ' + errText);
     }
 
@@ -26,8 +30,8 @@ exports.handler = async (event) => {
     let cleanedBase64;
 
     if (contentType.includes('application/json')) {
-      // Webeazzy returned JSON — extract base64 or URL
       const json = await res.json();
+      console.log('Webeazzy JSON:', JSON.stringify(json));
       if (json.result_b64) {
         cleanedBase64 = json.result_b64;
       } else if (json.result_url) {
@@ -35,10 +39,9 @@ exports.handler = async (event) => {
         const imgBuf = await imgRes.arrayBuffer();
         cleanedBase64 = Buffer.from(imgBuf).toString('base64');
       } else {
-        throw new Error('Webeazzy JSON response missing image data: ' + JSON.stringify(json));
+        throw new Error('Webeazzy JSON missing image: ' + JSON.stringify(json));
       }
     } else {
-      // Raw binary PNG
       const buffer = await res.arrayBuffer();
       cleanedBase64 = Buffer.from(buffer).toString('base64');
     }
@@ -49,6 +52,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({ cleanedImage: cleanedBase64, rotation: 0 })
     };
   } catch (err) {
+    console.log('Error:', err.message);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: err.message })
