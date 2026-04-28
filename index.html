@@ -414,7 +414,7 @@ function renderLicense(sideData) {
     const rc=r.getContext('2d'); rc.translate(ch/2,cw/2); rc.rotate(Math.PI/2); rc.drawImage(cropped,-cw/2,-ch/2);
     base=r;
   }
-  // Fit card into CR80 canvas without cropping — letterbox with white
+  // Fit card into CR80 canvas — scale to fill, preserve aspect ratio
   const ratio=base.width/base.height;
   let dw,dh,dx,dy;
   if (ratio>CR80_RATIO) { dw=OUT_W; dh=Math.round(OUT_W/ratio); dx=0; dy=Math.round((OUT_H-dh)/2); }
@@ -424,7 +424,7 @@ function renderLicense(sideData) {
   wctx.fillStyle='#fff'; wctx.fillRect(0,0,OUT_W,OUT_H);
   wctx.drawImage(base,0,0,base.width,base.height,dx,dy,dw,dh);
 
-  // Rounded corners + grayscale
+  // Grayscale only — no border, no clip
   const out=document.createElement('canvas'); out.width=OUT_W; out.height=OUT_H;
   const octx=out.getContext('2d');
   octx.fillStyle='#fff'; octx.fillRect(0,0,OUT_W,OUT_H);
@@ -435,16 +435,6 @@ function renderLicense(sideData) {
     else{const g=Math.round(.299*gd[i]+.587*gd[i+1]+.114*gd[i+2]);gd[i]=gd[i+1]=gd[i+2]=g;gd[i+3]=255;}
   }
   octx.putImageData(gid,0,0);
-  // Clean outline border
-  octx.strokeStyle='#aaaaaa';
-  octx.lineWidth=2;
-  const rad=Math.round(OUT_W*.04);
-  octx.beginPath();
-  octx.moveTo(rad,0); octx.lineTo(OUT_W-rad,0); octx.quadraticCurveTo(OUT_W,0,OUT_W,rad);
-  octx.lineTo(OUT_W,OUT_H-rad); octx.quadraticCurveTo(OUT_W,OUT_H,OUT_W-rad,OUT_H);
-  octx.lineTo(rad,OUT_H); octx.quadraticCurveTo(0,OUT_H,0,OUT_H-rad);
-  octx.lineTo(0,rad); octx.quadraticCurveTo(0,0,rad,0);
-  octx.closePath(); octx.stroke();
   return out;
 }
 
