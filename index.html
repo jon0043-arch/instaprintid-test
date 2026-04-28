@@ -195,9 +195,9 @@ const OUT_W = 1013, OUT_H = 638;
 const PAGE_W = 2550, PAGE_H = 3300;
 const CR80_RATIO = OUT_W / OUT_H;
 const state = { f: null, b: null };
-let currentSide = null, videoStream = null;
-let countdownTimer = null;
+let currentSide = null, videoStream = null, countdownTimer = null;
 
+// ── Cookie ───────────────────────────────────────────────────────────────────
 if (!sessionStorage.getItem('cookieDismissed')) {
   document.getElementById('cookie-banner').style.display = 'flex';
 }
@@ -206,6 +206,7 @@ function dismissCookie() {
   document.getElementById('cookie-banner').style.display='none';
 }
 
+// ── Countdown ────────────────────────────────────────────────────────────────
 function startCountdown() {
   if (countdownTimer) return;
   const txt = document.getElementById('auto-text');
@@ -234,6 +235,7 @@ function cancelCountdown() {
   if (txt) txt.textContent = 'Line up card, then tap the button';
 }
 
+// ── Camera ───────────────────────────────────────────────────────────────────
 async function openCamera(side) {
   currentSide = side;
   document.getElementById('cam-label').textContent = side==='f' ? 'Front of License' : 'Back of License';
@@ -261,6 +263,7 @@ function capturePhoto() {
   canvas.toBlob(blob=>{ closeCamera(); handleFile(currentSide,blob); },'image/jpeg',1.0);
 }
 
+// ── File handling ─────────────────────────────────────────────────────────────
 function handleFile(side, file) {
   const url = URL.createObjectURL(file);
   const im = new Image();
@@ -285,14 +288,12 @@ async function processLicense(side, file) {
     });
     const data = await res.json();
 
-    // Claude says retake
     if (data.retake) {
       setZoneStatus(side,'','');
       document.getElementById('zone-'+side).className='zone';
       document.getElementById('prev-'+side).classList.remove('show');
       document.getElementById('ph-'+side).style.display='';
       state[side] = null;
-      // Show clear message before reopening camera
       showRetakeAlert(data.reason, side);
       return;
     }
@@ -319,33 +320,25 @@ async function processLicense(side, file) {
   }
 }
 
+// ── Retake alert ─────────────────────────────────────────────────────────────
 function showRetakeAlert(reason, side) {
-  // Remove any existing alert
   const existing = document.getElementById('retake-alert');
   if (existing) existing.remove();
-
-  const alert = document.createElement('div');
-  alert.id = 'retake-alert';
-  alert.style.cssText = `
-    position: fixed; inset: 0; z-index: 9999;
-    background: rgba(0,0,0,0.75);
-    display: flex; align-items: center; justify-content: center;
-    padding: 24px;
-  `;
-  alert.innerHTML = `
+  const el = document.createElement('div');
+  el.id = 'retake-alert';
+  el.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;padding:24px;';
+  el.innerHTML = `
     <div style="background:#fff;border-radius:20px;padding:32px 28px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
       <div style="font-size:2.5rem;margin-bottom:12px">📷</div>
       <div style="font-size:1.1rem;font-weight:900;margin-bottom:8px;color:#000">Photo Rejected</div>
       <div style="font-size:0.88rem;color:#555;margin-bottom:24px;line-height:1.6">${reason}</div>
       <div style="font-size:0.78rem;color:#888;margin-bottom:20px">Place the license on a dark flat surface. Hold your phone directly above it — flat and steady.</div>
-      <button onclick="document.getElementById('retake-alert').remove();openCamera('${side}')"
-        style="display:block;width:100%;padding:14px;background:#000;color:#fff;border:none;border-radius:28px;font-size:1rem;font-weight:800;cursor:pointer">
-        Retake Photo
-      </button>
-    </div>
-  `;
-  document.body.appendChild(alert);
+      <button onclick="document.getElementById('retake-alert').remove();openCamera('${side}')" style="display:block;width:100%;padding:14px;background:#000;color:#fff;border:none;border-radius:28px;font-size:1rem;font-weight:800;cursor:pointer">Retake Photo</button>
+    </div>`;
+  document.body.appendChild(el);
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function setStatus(msg) { document.getElementById('status').textContent=msg; }
 function setZoneStatus(s,msg,cls) {
   const el=document.getElementById('st-'+s);
@@ -359,11 +352,40 @@ function fileToBase64(file) {
   return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file); });
 }
 
+// ── Deskew ────────────────────────────────────────────────────────────────────
+function deskewCard(canvas) {
+  const W=canvas.width, H=canvas.height;
+  const d=canvas.getContext('2d').getImageData(0,0,W,H).data;
+  const pts=[];
+  const step=Math.max(1,Math.floor(W/60));
+  for (let x=0;x<W;x+=step) {
+    for (let y=0;y<H;y++) {
+      if (d[(y*W+x)*4+3]>40) { pts.push({x,y}); break; }
+    }
+  }
+  if (pts.length<6) return canvas;
+  const n=pts.length;
+  let sx=0,sy=0,sxy=0,sx2=0;
+  for (const p of pts){sx+=p.x;sy+=p.y;sxy+=p.x*p.y;sx2+=p.x*p.x;}
+  const slope=(n*sxy-sx*sy)/(n*sx2-sx*sx);
+  const angle=Math.atan(slope);
+  const deg=Math.abs(angle*180/Math.PI);
+  if (deg<1||deg>15) return canvas;
+  const cos=Math.cos(-angle), sin=Math.sin(-angle);
+  const nw=Math.round(Math.abs(W*cos)+Math.abs(H*sin));
+  const nh=Math.round(Math.abs(W*sin)+Math.abs(H*cos));
+  const r=document.createElement('canvas'); r.width=nw; r.height=nh;
+  const rc=r.getContext('2d');
+  rc.fillStyle='#fff'; rc.fillRect(0,0,nw,nh);
+  rc.translate(nw/2,nh/2); rc.rotate(-angle);
+  rc.drawImage(canvas,-W/2,-H/2);
+  return r;
+}
+
+// ── Light perspective fix ─────────────────────────────────────────────────────
 function lightPerspectiveFix(canvas) {
   const W=canvas.width, H=canvas.height;
   const d=canvas.getContext('2d').getImageData(0,0,W,H).data;
-
-  // Find extreme corners using diagonal scoring on transparent pixels
   let tl=null,tr=null,bl=null,br=null;
   let tlMin=Infinity,trMax=-Infinity,blMin=Infinity,brMax=-Infinity;
   const step=Math.max(1,Math.floor(W/100));
@@ -377,38 +399,26 @@ function lightPerspectiveFix(canvas) {
     }
   }
   if (!tl||!tr||!bl||!br) return canvas;
-
-  // Measure how much perspective distortion exists
-  // Compare top width vs bottom width, left height vs right height
   const topW=Math.hypot(tr.x-tl.x,tr.y-tl.y);
   const botW=Math.hypot(br.x-bl.x,br.y-bl.y);
   const leftH=Math.hypot(bl.x-tl.x,bl.y-tl.y);
   const rightH=Math.hypot(br.x-tr.x,br.y-tr.y);
-
   const wRatio=Math.abs(topW-botW)/Math.max(topW,botW);
   const hRatio=Math.abs(leftH-rightH)/Math.max(leftH,rightH);
-
-  // Only apply if distortion is small (under 12%) — don't touch severe distortion
-  if (wRatio>0.12 && hRatio>0.12) return canvas;
-  if (wRatio<0.01 && hRatio<0.01) return canvas; // already perfect
-
-  // Target rectangle using average dimensions
+  if (wRatio>0.12&&hRatio>0.12) return canvas;
+  if (wRatio<0.01&&hRatio<0.01) return canvas;
   const dstW=Math.round((topW+botW)/2);
   const dstH=Math.round((leftH+rightH)/2);
   if (dstW<50||dstH<30) return canvas;
-
-  // Simple bilinear warp using inverse mapping
   const src=[tl,tr,br,bl];
   const dst=[{x:0,y:0},{x:dstW,y:0},{x:dstW,y:dstH},{x:0,y:dstH}];
-
-  // Build inverse homography
-  const A=[],b=[];
+  const A=[],bv=[];
   for (let i=0;i<4;i++) {
     const {x:sx,y:sy}=dst[i],{x:dx,y:dy}=src[i];
-    A.push([sx,sy,1,0,0,0,-sx*dx,-sy*dx]);b.push(dx);
-    A.push([0,0,0,sx,sy,1,-sx*dy,-sy*dy]);b.push(dy);
+    A.push([sx,sy,1,0,0,0,-sx*dx,-sy*dx]);bv.push(dx);
+    A.push([0,0,0,sx,sy,1,-sx*dy,-sy*dy]);bv.push(dy);
   }
-  const M=A.map((r,i)=>[...r,b[i]]);
+  const M=A.map((row,i)=>[...row,bv[i]]);
   for (let c=0;c<8;c++) {
     let mx=c;
     for (let r=c+1;r<8;r++) if(Math.abs(M[r][c])>Math.abs(M[mx][c]))mx=r;
@@ -416,25 +426,23 @@ function lightPerspectiveFix(canvas) {
     if(Math.abs(M[c][c])<1e-12)continue;
     for (let r=0;r<8;r++){if(r===c)continue;const f=M[r][c]/M[c][c];for(let j=0;j<=8;j++)M[r][j]-=f*M[c][j];}
   }
-  const h=M.map((r,i)=>r[8]/r[i]);
-  const H=[[h[0],h[1],h[2]],[h[3],h[4],h[5]],[h[6],h[7],1]];
-
+  const h=M.map((row,i)=>row[8]/row[i]);
+  const Hm=[[h[0],h[1],h[2]],[h[3],h[4],h[5]],[h[6],h[7],1]];
   const sData=canvas.getContext('2d').getImageData(0,0,W,H).data;
   const out=document.createElement('canvas'); out.width=dstW; out.height=dstH;
   const oCtx=out.getContext('2d');
   const oData=oCtx.createImageData(dstW,dstH);
-
   for (let dy=0;dy<dstH;dy++) for (let dx=0;dx<dstW;dx++) {
-    const w=H[2][0]*dx+H[2][1]*dy+H[2][2];
-    const sx=(H[0][0]*dx+H[0][1]*dy+H[0][2])/w;
-    const sy=(H[1][0]*dx+H[1][1]*dy+H[1][2])/w;
+    const w=Hm[2][0]*dx+Hm[2][1]*dy+Hm[2][2];
+    const sx=(Hm[0][0]*dx+Hm[0][1]*dy+Hm[0][2])/w;
+    const sy=(Hm[1][0]*dx+Hm[1][1]*dy+Hm[1][2])/w;
     const x0=Math.floor(sx),y0=Math.floor(sy);
     const fx=sx-x0,fy=sy-y0;
-    const getP=(x,y)=>{
+    const gP=(x,y)=>{
       if(x<0||x>=W||y<0||y>=H)return[255,255,255,0];
       const i=(y*W+x)*4;return[sData[i],sData[i+1],sData[i+2],sData[i+3]];
     };
-    const p00=getP(x0,y0),p10=getP(x0+1,y0),p01=getP(x0,y0+1),p11=getP(x0+1,y0+1);
+    const p00=gP(x0,y0),p10=gP(x0+1,y0),p01=gP(x0,y0+1),p11=gP(x0+1,y0+1);
     const i=(dy*dstW+dx)*4;
     for (let c=0;c<4;c++) oData.data[i+c]=Math.round(p00[c]*(1-fx)*(1-fy)+p10[c]*fx*(1-fy)+p01[c]*(1-fx)*fy+p11[c]*fx*fy);
   }
@@ -442,44 +450,7 @@ function lightPerspectiveFix(canvas) {
   return out;
 }
 
-function deskewCard(canvas) {
-  const W=canvas.width, H=canvas.height;
-  const d=canvas.getContext('2d').getImageData(0,0,W,H).data;
-
-  // Sample top edge — find topmost non-transparent pixel per column
-  const pts=[];
-  const step=Math.max(1,Math.floor(W/60));
-  for (let x=0;x<W;x+=step) {
-    for (let y=0;y<H;y++) {
-      if (d[(y*W+x)*4+3]>40) { pts.push({x,y}); break; }
-    }
-  }
-  if (pts.length<6) return canvas;
-
-  // Linear regression on top edge
-  const n=pts.length;
-  let sx=0,sy=0,sxy=0,sx2=0;
-  for (const p of pts){sx+=p.x;sy+=p.y;sxy+=p.x*p.y;sx2+=p.x*p.x;}
-  const slope=(n*sxy-sx*sy)/(n*sx2-sx*sx);
-  const angle=Math.atan(slope); // radians
-  const deg=Math.abs(angle*180/Math.PI);
-
-  // Only correct small tilts — ignore if too large (Claude should have caught those)
-  if (deg < 1 || deg > 15) return canvas;
-
-  // Rotate canvas by -angle to deskew
-  const cos=Math.cos(-angle), sin=Math.sin(-angle);
-  const nw=Math.round(Math.abs(W*cos)+Math.abs(H*sin));
-  const nh=Math.round(Math.abs(W*sin)+Math.abs(H*cos));
-  const r=document.createElement('canvas'); r.width=nw; r.height=nh;
-  const rc=r.getContext('2d');
-  rc.fillStyle='#fff'; rc.fillRect(0,0,nw,nh);
-  rc.translate(nw/2,nh/2);
-  rc.rotate(-angle);
-  rc.drawImage(canvas,-W/2,-H/2);
-  return r;
-}
-
+// ── Render license ────────────────────────────────────────────────────────────
 function renderLicense(sideData) {
   const {img} = sideData;
   const src=document.createElement('canvas');
@@ -507,7 +478,7 @@ function renderLicense(sideData) {
     base=r;
   }
 
-  // Conservative deskew + light perspective fix
+  // Deskew + light perspective fix
   base = deskewCard(base);
   base = lightPerspectiveFix(base);
 
@@ -532,6 +503,7 @@ function renderLicense(sideData) {
   return out;
 }
 
+// ── Build + output ────────────────────────────────────────────────────────────
 function buildPage() {
   const page=document.createElement('canvas'); page.width=PAGE_W; page.height=PAGE_H;
   const ctx=page.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,PAGE_W,PAGE_H);
